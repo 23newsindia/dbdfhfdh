@@ -25,6 +25,7 @@ if (!function_exists('wns_get_unsubscribe_link')) {
 if (!function_exists('wns_get_standard_email_headers')) {
     function wns_get_standard_email_headers($recipient_email = '') {
         $site_name = get_bloginfo('name');
+        $site_domain = parse_url(home_url(), PHP_URL_HOST);
         $admin_email = get_option('admin_email');
         $unsubscribe_link = wns_get_unsubscribe_link($recipient_email);
         
@@ -32,12 +33,37 @@ if (!function_exists('wns_get_standard_email_headers')) {
             'Content-Type: text/html; charset=UTF-8',
             'From: ' . $site_name . ' <' . $admin_email . '>',
             'Reply-To: ' . $admin_email,
+            'Return-Path: ' . $admin_email,
+            'Sender: ' . $admin_email,
+            
+            // List management headers (RFC 2369) - Critical for Gmail
+            'List-ID: ' . $site_name . ' Newsletter <newsletter.' . $site_domain . '>',
             'List-Unsubscribe: <' . $unsubscribe_link . '>',
             'List-Unsubscribe-Post: List-Unsubscribe=One-Click',
+            'List-Archive: <' . home_url() . '>',
+            'List-Owner: <mailto:' . $admin_email . '>',
+            'List-Subscribe: <' . home_url() . '>',
+            
+            // Email client optimization
             'X-Mailer: WordPress/' . get_bloginfo('version') . ' - WP Newsletter Plugin',
             'X-Priority: 3',
             'X-MSMail-Priority: Normal',
-            'Precedence: bulk'
+            'Importance: Normal',
+            
+            // Bulk email identification
+            'Precedence: bulk',
+            'Auto-Submitted: auto-generated',
+            
+            // Gmail-specific headers
+            'X-Google-Original-From: ' . $admin_email,
+            'X-Auto-Response-Suppress: All',
+            
+            // Campaign tracking
+            'X-Campaign-ID: newsletter-' . date('Y-m-d'),
+            'X-Mailer-LID: ' . md5($site_domain . date('Y-m-d')),
+            
+            // Security headers
+            'X-Content-Type-Options: nosniff'
         );
         
         return $headers;

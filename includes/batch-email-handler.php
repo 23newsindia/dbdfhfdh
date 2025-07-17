@@ -30,13 +30,30 @@ function wns_process_email_queue() {
     // Ensure tables exist before processing
     wns_ensure_tables_exist();
 
-    $batch_size = get_option('wns_email_batch_size', 100);
+    // Get dynamic batch size based on deliverability factors
+    $base_batch_size = get_option('wns_email_batch_size', 50); // Reduced default
+    $batch_size = apply_filters('wns_email_batch_size', $base_batch_size);
+    
+    // Implement progressive sending - slower during peak hours
+    $current_hour = (int) date('H');
+    if ($current_hour >= 9 && $current_hour <= 17) {
+        $batch_size = min($batch_size, 25); // Reduce during business hours
+    }
+    
     $now = current_time('timestamp');
     $queue_table = $wpdb->prefix . 'newsletter_email_queue';
 
     // Check if table exists before querying with prepared statement
     if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $queue_table)) != $queue_table) {
         return; // Table doesn't exist, skip processing
+    }
+
+    // Add delay between batches to avoid overwhelming mail servers
+    $last_batch_time = get_transient('wns_last_batch_time');
+    $min_interval = get_option('wns_email_send_interval_minutes', 5) * 60; // Convert to seconds
+    
+    if ($last_batch_time && (time() - $last_batch_time) < $min_interval) {
+        return; // Too soon since last batch
     }
 
     // Get all pending emails with prepared statement
@@ -58,6 +75,9 @@ function wns_process_email_queue() {
         return;
     }
 
+    $successful_sends = 0;
+    $failed_sends = 0;
+    
     foreach ($emails as $email) {
         // Validate email before sending
         if (!is_email($email->recipient)) {
@@ -69,6 +89,7 @@ function wns_process_email_queue() {
                 array('%d', '%s'),
                 array('%d')
             );
+            $failed_sends++;
             continue;
         }
 
@@ -85,6 +106,14 @@ function wns_process_email_queue() {
             $email_body = str_replace('{unsubscribe_link}', $unsubscribe_link, $email_body);
         }
 
+        // Apply deliverability optimizations
+        $email_body = apply_filters('wns_email_content', $email_body, 'newsletter');
+        
+        // Add small delay between individual emails to avoid rate limiting
+        if ($successful_sends > 0 && $successful_sends % 10 === 0) {
+            sleep(2); // 2 second pause every 10 emails
+        }
+
         // Send email with enhanced error handling
         $sent = wp_mail(
             sanitize_email($email->recipient), 
@@ -96,8 +125,10 @@ function wns_process_email_queue() {
         // Log email activity
         if ($sent) {
             wns_log_email_activity($email->recipient, 'sent_via_queue', 'Email sent successfully via queue');
+            $successful_sends++;
         } else {
             wns_log_email_activity($email->recipient, 'failed_via_queue', 'Email failed to send via queue');
+            $failed_sends++;
         }
 
         // Mark as sent regardless of success to prevent infinite retries
@@ -108,5 +139,21 @@ function wns_process_email_queue() {
             array('%d', '%s'),
             array('%d')
         );
+    }
+    
+    // Record batch completion time
+    set_transient('wns_last_batch_time', time(), HOUR_IN_SECONDS);
+    
+    // Log batch statistics
+    if ($successful_sends > 0 || $failed_sends > 0) {
+        error_log("WNS Batch Complete: {$successful_sends} sent, {$failed_sends} failed");
+    }
+    
+    // Adjust future batch sizes based on success rate
+    $success_rate = $successful_sends / ($successful_sends + $failed_sends + 1);
+    if ($success_rate < 0.8) {
+        // Reduce batch size if success rate is low
+        $new_batch_size = max(10, $base_batch_size * 0.8);
+        update_option('wns_email_batch_size', $new_batch_size);
     }
 }

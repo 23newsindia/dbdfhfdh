@@ -248,12 +248,21 @@ function wns_render_settings_page() {
 
             <!-- New Post Notifications Section -->
             <h2><?php _e('New Post Notifications', 'wp-newsletter-subscription'); ?></h2>
+            <p class="description" style="background: #e8f5e8; padding: 15px; border-left: 4px solid #28a745; margin-bottom: 20px;">
+                <strong>💡 New Feature:</strong> You can now control newsletter sending on a per-post basis! When editing a post, look for the "📧 Newsletter Sending Options" meta box in the sidebar to:
+                <br>• Enable/disable auto-sending for that specific post
+                <br>• Choose to send to all subscribers or selected subscribers only
+                <br>• Send newsletters immediately with the "Send Now" button
+            </p>
             <table class="form-table">
                 <tr valign="top">
                     <th scope="row"><?php _e('Enable New Post Notifications', 'wp-newsletter-subscription'); ?></th>
                     <td>
                         <label><input type="checkbox" name="wns_enable_new_post_notification" value="1" <?php checked(1, get_option('wns_enable_new_post_notification', false)); ?> /> <?php _e('Send email to all subscribers when a new post is published.', 'wp-newsletter-subscription'); ?></label>
-                        <p class="description"><?php _e('New post emails will include the featured image, title, excerpt, and a beautiful "Read More" button.', 'wp-newsletter-subscription'); ?></p>
+                        <p class="description">
+                            <?php _e('This is the default setting for new posts. You can override this setting for individual posts using the meta box in the post editor.', 'wp-newsletter-subscription'); ?>
+                            <br><?php _e('New post emails will include the featured image, title, excerpt, and a beautiful "Read More" button.', 'wp-newsletter-subscription'); ?>
+                        </p>
                     </td>
                 </tr>
                 <tr valign="top">
@@ -286,19 +295,47 @@ function wns_render_settings_page() {
 
             <!-- Email Sending Limits Section -->
             <h2><?php _e('Email Sending Limits', 'wp-newsletter-subscription'); ?></h2>
+            <p class="description" style="background: #fff3cd; padding: 15px; border-left: 4px solid #ffc107; margin-bottom: 20px;">
+                <strong>⚠️ Important for Gmail Deliverability:</strong> Lower batch sizes and longer intervals improve inbox delivery rates. 
+                For 3000+ subscribers, use batch size 25-50 with 5-10 minute intervals.
+            </p>
             <table class="form-table">
                 <tr valign="top">
                     <th scope="row"><?php _e('Emails Per Batch', 'wp-newsletter-subscription'); ?></th>
                     <td>
-                        <input type="number" name="wns_email_batch_size" value="<?php echo esc_attr(get_option('wns_email_batch_size', 100)); ?>" min="1" max="1000" />
-                        <p class="description"><?php _e('How many emails to send at once.', 'wp-newsletter-subscription'); ?></p>
+                        <input type="number" name="wns_email_batch_size" value="<?php echo esc_attr(get_option('wns_email_batch_size', 50)); ?>" min="10" max="200" />
+                        <p class="description">
+                            <?php _e('How many emails to send at once. Recommended: 25-50 for better deliverability.', 'wp-newsletter-subscription'); ?>
+                            <br><strong>Current setting will send to all 3000 subscribers in approximately <?php echo ceil(3000 / get_option('wns_email_batch_size', 50)) * get_option('wns_email_send_interval_minutes', 5); ?> minutes.</strong>
+                        </p>
                     </td>
                 </tr>
                 <tr valign="top">
                     <th scope="row"><?php _e('Send Interval (minutes)', 'wp-newsletter-subscription'); ?></th>
                     <td>
-                        <input type="number" name="wns_email_send_interval_minutes" value="<?php echo esc_attr(get_option('wns_email_send_interval_minutes', 5)); ?>" min="1" max="60" />
-                        <p class="description"><?php _e('Time to wait between each batch of emails.', 'wp-newsletter-subscription'); ?></p>
+                        <input type="number" name="wns_email_send_interval_minutes" value="<?php echo esc_attr(get_option('wns_email_send_interval_minutes', 5)); ?>" min="2" max="60" />
+                        <p class="description">
+                            <?php _e('Time to wait between each batch of emails. Recommended: 5-10 minutes for large lists.', 'wp-newsletter-subscription'); ?>
+                            <br><em>Longer intervals = better deliverability but slower sending.</em>
+                        </p>
+                    </td>
+                </tr>
+                <tr valign="top">
+                    <th scope="row"><?php _e('Email Reputation Score', 'wp-newsletter-subscription'); ?></th>
+                    <td>
+                        <?php
+                        $stats = get_option('wns_email_stats', array('sent' => 0, 'failed' => 0));
+                        $total = $stats['sent'] + $stats['failed'];
+                        $success_rate = $total > 0 ? ($stats['sent'] / $total) * 100 : 100;
+                        $color = $success_rate >= 95 ? 'green' : ($success_rate >= 80 ? 'orange' : 'red');
+                        ?>
+                        <span style="color: <?php echo $color; ?>; font-weight: bold; font-size: 16px;">
+                            <?php echo number_format($success_rate, 1); ?>%
+                        </span>
+                        <p class="description">
+                            Success rate: <?php echo $stats['sent']; ?> sent, <?php echo $stats['failed']; ?> failed.
+                            <br>High success rates (95%+) improve future deliverability.
+                        </p>
                     </td>
                 </tr>
             </table>

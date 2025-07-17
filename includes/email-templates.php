@@ -11,6 +11,7 @@ class WNS_Email_Templates {
     public static function get_email_wrapper($content, $title = '') {
         $site_name = get_bloginfo('name');
         $site_url = home_url();
+        $site_domain = parse_url($site_url, PHP_URL_HOST);
         
         // Get social media links
         $facebook_url = get_option('wns_facebook_url', '');
@@ -42,13 +43,29 @@ class WNS_Email_Templates {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="format-detection" content="telephone=no">
+    <meta name="x-apple-disable-message-reformatting">
     <title>' . esc_html($title ?: $site_name) . '</title>
+    <!--[if mso]>
+    <noscript>
+        <xml>
+            <o:OfficeDocumentSettings>
+                <o:PixelsPerInch>96</o:PixelsPerInch>
+            </o:OfficeDocumentSettings>
+        </xml>
+    </noscript>
+    <![endif]-->
 </head>
 <body style="margin: 0; padding: 0; background-color: #ffffff; font-family: Arial, Helvetica, sans-serif; line-height: 1.4; color: #333333;">
+    <!-- Preheader text for better inbox preview -->
+    <div style="display: none; font-size: 1px; color: #fefefe; line-height: 1px; font-family: Arial, sans-serif; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
+        Newsletter from ' . esc_html($site_name) . ' - ' . esc_html(date('F j, Y')) . '
+    </div>
+    
     <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4;">
         <tr>
             <td align="center" style="padding: 20px 0;">
-                <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border: 1px solid #dddddd;">
+                <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border: 1px solid #dddddd; max-width: 600px;">
                     
                     <!-- Header with Text Logo -->
                     <tr>
@@ -56,6 +73,9 @@ class WNS_Email_Templates {
                             <h1 style="margin: 0; color: #333333; font-size: 28px; font-weight: bold; font-family: Arial, sans-serif;">
                                 ' . esc_html($site_name) . '
                             </h1>
+                            <p style="margin: 5px 0 0 0; font-size: 14px; color: #666666;">
+                                ' . esc_html(date('F j, Y')) . '
+                            </p>
                         </td>
                     </tr>
                     
@@ -69,17 +89,21 @@ class WNS_Email_Templates {
                     <!-- Footer -->
                     <tr>
                         <td style="padding: 20px; background-color: #f8f8f8; border-top: 1px solid #eeeeee; text-align: center;">
+                            <p style="margin: 0 0 10px 0; font-size: 12px; color: #999999;">
+                                This email was sent to you because you subscribed to our newsletter at ' . esc_html($site_domain) . '
+                            </p>
                             <p style="margin: 0 0 10px 0; font-size: 14px; color: #666666;">
-                                You received this because you subscribed to our newsletter.
+                                <strong>Manage your subscription:</strong>
                             </p>
                             <p style="margin: 0; font-size: 14px; color: #666666;">
                                 <a href="{unsubscribe_link}" style="color: #0066cc; text-decoration: underline;">Unsubscribe</a> | 
                                 <a href="' . esc_url($site_url) . '" style="color: #0066cc; text-decoration: underline;">Visit Website</a>
                             </p>
                             ' . $social_links . '
-                            <p style="margin: 10px 0 0 0; font-size: 12px; color: #999999;">
-                                ' . esc_html($site_name) . '<br>
-                                This email was sent to you because you subscribed to our newsletter.
+                            <p style="margin: 15px 0 0 0; font-size: 11px; color: #999999; line-height: 1.3;">
+                                ' . esc_html($site_name) . ' | ' . esc_html($site_domain) . '<br>
+                                This is a promotional email. If you no longer wish to receive these emails, please unsubscribe above.<br>
+                                © ' . date('Y') . ' ' . esc_html($site_name) . '. All rights reserved.
                             </p>
                         </td>
                     </tr>

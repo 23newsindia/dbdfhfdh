@@ -50,6 +50,7 @@ require_once WNS_PLUGIN_DIR . 'includes/admin/email-queue-page.php';
 require_once WNS_PLUGIN_DIR . 'includes/admin/class-wns-email-queue-list-table.php';
 require_once WNS_PLUGIN_DIR . 'includes/admin/email-queue-view.php';
 require_once WNS_PLUGIN_DIR . 'includes/admin/admin-menu.php';
+require_once WNS_PLUGIN_DIR . 'includes/admin/post-meta-box.php';
 
 // Frontend includes
 require_once WNS_PLUGIN_DIR . 'includes/subscription-form.php';
@@ -64,6 +65,9 @@ require_once WNS_PLUGIN_DIR . 'includes/cleanup.php';
 
 // Email templates
 require_once WNS_PLUGIN_DIR . 'includes/email-templates.php';
+
+// Email deliverability enhancements (NEW)
+require_once WNS_PLUGIN_DIR . 'includes/email-deliverability.php';
 
 // Download handler (NEW)
 require_once WNS_PLUGIN_DIR . 'includes/download-handler.php';
