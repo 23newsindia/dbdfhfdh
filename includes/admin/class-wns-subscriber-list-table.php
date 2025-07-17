@@ -81,6 +81,7 @@ class WNS_Subscriber_List_Table extends WP_List_Table {
     public function get_bulk_actions() {
         return [
             'delete' => __('Delete', 'wp-newsletter-subscription'),
+            'delete_all_unverified' => __('Delete All Unverified', 'wp-newsletter-subscription'),
             'verify' => __('Mark as Verified', 'wp-newsletter-subscription'),
             'unverify' => __('Mark as Unverified', 'wp-newsletter-subscription')
         ];
@@ -149,7 +150,13 @@ class WNS_Subscriber_List_Table extends WP_List_Table {
             $order = strtoupper(sanitize_text_field($_REQUEST['order']));
         }
 
-        $per_page = 20;
+        // Allow different per-page options
+        $allowed_per_page = [20, 50, 100, 200, 500];
+        $per_page = 20; // default
+        if (!empty($_REQUEST['per_page']) && in_array((int)$_REQUEST['per_page'], $allowed_per_page)) {
+            $per_page = (int)$_REQUEST['per_page'];
+        }
+        
         $current_page = $this->get_pagenum();
 
         // Count total items
@@ -182,7 +189,48 @@ class WNS_Subscriber_List_Table extends WP_List_Table {
      * Process bulk actions
      */
     public function process_bulk_action() {
-        if (!isset($_REQUEST['action']) || !isset($_REQUEST['subscriber'])) {
+        if (!isset($_REQUEST['action'])) {
+            return;
+        }
+
+        $action = sanitize_text_field($_REQUEST['action']);
+        
+        // Handle delete all unverified action (doesn't need selected items)
+        if ($action === 'delete_all_unverified') {
+            // Verify nonce
+            if (!wp_verify_nonce($_REQUEST['_wpnonce'], 'bulk-' . $this->_args['plural'])) {
+                wp_die(__('Security check failed.', 'wp-newsletter-subscription'));
+            }
+            
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'newsletter_subscribers';
+            
+            // Get count first for confirmation
+            $unverified_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM `$table_name` WHERE `verified` = %d", 0));
+            
+            if ($unverified_count > 0) {
+                $deleted = $wpdb->query($wpdb->prepare("DELETE FROM `$table_name` WHERE `verified` = %d", 0));
+                
+                if ($deleted !== false) {
+                    // Add admin notice
+                    add_action('admin_notices', function() use ($unverified_count) {
+                        echo '<div class="notice notice-success is-dismissible">';
+                        echo '<p><strong>' . sprintf(__('%d unverified subscribers have been deleted.', 'wp-newsletter-subscription'), $unverified_count) . '</strong></p>';
+                        echo '</div>';
+                    });
+                } else {
+                    add_action('admin_notices', function() {
+                        echo '<div class="notice notice-error is-dismissible">';
+                        echo '<p><strong>' . __('Error deleting unverified subscribers.', 'wp-newsletter-subscription') . '</strong></p>';
+                        echo '</div>';
+                    });
+                }
+            }
+            return;
+        }
+
+        // Handle regular bulk actions that need selected items
+        if (!isset($_REQUEST['subscriber'])) {
             return;
         }
 
@@ -191,7 +239,6 @@ class WNS_Subscriber_List_Table extends WP_List_Table {
             wp_die(__('Security check failed.', 'wp-newsletter-subscription'));
         }
 
-        $action = sanitize_text_field($_REQUEST['action']);
         $ids = array_map('absint', (array)$_REQUEST['subscriber']);
         $ids = array_filter($ids); // Remove any zero values
         
@@ -221,16 +268,30 @@ class WNS_Subscriber_List_Table extends WP_List_Table {
      */
     function extra_tablenav($which) {
         if ($which === 'top') {
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'newsletter_subscribers';
+            $unverified_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM `$table_name` WHERE `verified` = %d", 0));
+            
             ?>
             <div class="alignleft actions">
                 <?php
                 $verified_filter = isset($_REQUEST['verified']) ? sanitize_text_field($_REQUEST['verified']) : '';
+                $current_per_page = isset($_REQUEST['per_page']) ? (int)$_REQUEST['per_page'] : 20;
                 ?>
                 <label for="filter-by-verified"><?php esc_html_e('Show:', 'wp-newsletter-subscription'); ?></label>
                 <select name="verified" id="filter-by-verified">
                     <option value=""><?php esc_html_e('All Statuses', 'wp-newsletter-subscription'); ?></option>
                     <option value="yes" <?php selected($verified_filter, 'yes'); ?>><?php esc_html_e('Verified', 'wp-newsletter-subscription'); ?></option>
                     <option value="no" <?php selected($verified_filter, 'no'); ?>><?php esc_html_e('Unverified', 'wp-newsletter-subscription'); ?></option>
+                </select>
+
+                <label for="per-page" style="margin-left: 15px;"><?php esc_html_e('Show:', 'wp-newsletter-subscription'); ?></label>
+                <select name="per_page" id="per-page">
+                    <option value="20" <?php selected($current_per_page, 20); ?>>20 per page</option>
+                    <option value="50" <?php selected($current_per_page, 50); ?>>50 per page</option>
+                    <option value="100" <?php selected($current_per_page, 100); ?>>100 per page</option>
+                    <option value="200" <?php selected($current_per_page, 200); ?>>200 per page</option>
+                    <option value="500" <?php selected($current_per_page, 500); ?>>500 per page</option>
                 </select>
 
                 <?php
@@ -241,6 +302,21 @@ class WNS_Subscriber_List_Table extends WP_List_Table {
                 submit_button(__('Search', 'wp-newsletter-subscription'), '', '', false);
                 ?>
             </div>
+            
+            <?php if ($unverified_count > 0): ?>
+            <div class="alignright actions" style="margin-left: 20px;">
+                <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px 15px; border-radius: 4px; display: inline-block;">
+                    <strong style="color: #856404;">⚠️ <?php echo $unverified_count; ?> Unverified Subscribers</strong>
+                    <form method="post" style="display: inline-block; margin-left: 10px;" onsubmit="return confirm('<?php echo esc_js(sprintf(__('Are you sure you want to delete all %d unverified subscribers? This action cannot be undone.', 'wp-newsletter-subscription'), $unverified_count)); ?>');">
+                        <?php wp_nonce_field('bulk-' . $this->_args['plural']); ?>
+                        <input type="hidden" name="action" value="delete_all_unverified" />
+                        <button type="submit" class="button button-secondary" style="background: #dc3545; color: white; border-color: #dc3545;">
+                            🗑️ Delete All Unverified
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <?php endif; ?>
             <?php
         }
     }

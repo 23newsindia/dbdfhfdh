@@ -268,8 +268,8 @@ class WNS_Email_Templates {
         // Check for custom email description first
         $custom_description = get_post_meta($post->ID, '_wns_custom_email_description', true);
         if (!empty($custom_description)) {
-            // Custom description is already HTML from the editor
-            $post_excerpt = wp_kses_post($custom_description);
+            // Custom description from WordPress editor - preserve line breaks
+            $post_excerpt = wpautop(wp_kses_post($custom_description));
         } else {
             $post_excerpt = has_excerpt($post->ID) ? get_the_excerpt($post->ID) : wp_trim_words(strip_tags($post->post_content), 30);
             // Convert plain text to HTML paragraph

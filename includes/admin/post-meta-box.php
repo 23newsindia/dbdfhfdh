@@ -233,9 +233,9 @@ function wns_render_post_newsletter_meta_box($post) {
         window.wns_open_subscriber_modal = function() {
             // Create modal HTML
             var modal = $('<div id="wns-subscriber-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; align-items: center; justify-content: center;"></div>');
-            var content = $('<div style="background: white; width: 80%; max-width: 600px; max-height: 80%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></div>');
-            var header = $('<div style="padding: 20px; border-bottom: 1px solid #ddd; background: #f8f9fa;"><h3 style="margin: 0;">Select Subscribers</h3></div>');
-            var body = $('<div style="padding: 20px; max-height: 400px; overflow-y: auto;"><div class="loading">Loading subscribers...</div></div>');
+            var content = $('<div style="background: white; width: 90%; max-width: 700px; max-height: 90%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></div>');
+            var header = $('<div style="padding: 20px; border-bottom: 1px solid #ddd; background: #f8f9fa;"><h3 style="margin: 0 0 15px 0;">Select Subscribers</h3><div style="position: relative;"><input type="text" id="wns-subscriber-search" placeholder="Search subscribers by email..." style="width: 100%; padding: 10px 40px 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;" /><span style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); color: #666; pointer-events: none;">🔍</span></div></div>');
+            var body = $('<div style="padding: 20px; max-height: 500px; overflow-y: auto;"><div class="loading">Loading subscribers...</div></div>');
             var footer = $('<div style="padding: 20px; border-top: 1px solid #ddd; background: #f8f9fa; text-align: right;"><button class="button button-secondary" onclick="wns_close_subscriber_modal()">Cancel</button> <button class="button button-primary" onclick="wns_save_selected_subscribers()">Save Selection</button></div>');
             
             content.append(header, body, footer);
@@ -250,6 +250,36 @@ function wns_render_post_newsletter_meta_box($post) {
             }, function(response) {
                 if (response.success) {
                     body.html(response.data.html);
+                    
+                    // Initialize search functionality
+                    $('#wns-subscriber-search').on('input', function() {
+                        var searchTerm = $(this).val().toLowerCase();
+                        var visibleCount = 0;
+                        
+                        $('#wns-subscriber-list .subscriber-item').each(function() {
+                            var email = $(this).find('input[type="checkbox"]').val().toLowerCase();
+                            if (email.includes(searchTerm)) {
+                                $(this).show();
+                                visibleCount++;
+                            } else {
+                                $(this).hide();
+                            }
+                        });
+                        
+                        // Update visible count
+                        $('#wns-visible-count').text('(' + visibleCount + ' shown)');
+                        
+                        // Update "Select All" functionality for filtered results
+                        $('#wns-select-all-visible').off('change').on('change', function() {
+                            var isChecked = $(this).prop('checked');
+                            $('#wns-subscriber-list .subscriber-item:visible input[type="checkbox"]').prop('checked', isChecked);
+                        });
+                    });
+                    
+                    // Focus on search input
+                    setTimeout(function() {
+                        $('#wns-subscriber-search').focus();
+                    }, 100);
                 } else {
                     body.html('<p style="color: red;">Error loading subscribers.</p>');
                 }
@@ -354,7 +384,7 @@ function wns_save_post_newsletter_meta($post_id) {
     
     // Save custom email fields
     $custom_email_title = isset($_POST['wns_custom_email_title']) ? sanitize_text_field($_POST['wns_custom_email_title']) : '';
-    $custom_email_description = isset($_POST['wns_custom_email_description']) ? sanitize_textarea_field($_POST['wns_custom_email_description']) : '';
+    $custom_email_description = isset($_POST['wns_custom_email_description']) ? wp_kses_post($_POST['wns_custom_email_description']) : '';
     
     update_post_meta($post_id, '_wns_custom_email_title', $custom_email_title);
     update_post_meta($post_id, '_wns_custom_email_description', $custom_email_description);
@@ -450,20 +480,23 @@ function wns_ajax_get_subscribers_for_selection() {
         return;
     }
     
-    $html = '<div style="margin-bottom: 15px;">
+    $html = '<div style="margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee;">
         <label style="font-weight: bold;">
-            <input type="checkbox" id="wns-select-all" style="margin-right: 8px;" />
-            Select All (' . count($subscribers) . ' subscribers)
+            <input type="checkbox" id="wns-select-all-visible" style="margin-right: 8px;" />
+            Select All Visible <span id="wns-visible-count">(' . count($subscribers) . ' shown)</span>
         </label>
+        <div style="margin-top: 10px; font-size: 12px; color: #666;">
+            Total subscribers: ' . count($subscribers) . ' | Selected: <span id="wns-current-selected">' . count($selected) . '</span>
+        </div>
     </div>';
     
-    $html .= '<div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fafafa;">';
+    $html .= '<div id="wns-subscriber-list" style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: #fafafa;">';
     
     foreach ($subscribers as $subscriber) {
         $checked = in_array($subscriber->email, $selected) ? 'checked' : '';
-        $html .= '<label style="display: block; padding: 5px 0; cursor: pointer;">
+        $html .= '<label class="subscriber-item" style="display: block; padding: 8px 0; cursor: pointer; border-bottom: 1px solid #eee; margin-bottom: 5px;">
             <input type="checkbox" value="' . esc_attr($subscriber->email) . '" ' . $checked . ' style="margin-right: 8px;" />
-            ' . esc_html($subscriber->email) . '
+            <span style="font-family: monospace; font-size: 13px;">' . esc_html($subscriber->email) . '</span>
         </label>';
     }
     
@@ -471,8 +504,24 @@ function wns_ajax_get_subscribers_for_selection() {
     
     $html .= '<script>
         jQuery(function($) {
-            $("#wns-select-all").change(function() {
-                $("#wns-subscriber-modal input[type=\"checkbox\"]").not(this).prop("checked", this.checked);
+            // Update selected count when checkboxes change
+            function updateSelectedCount() {
+                var selectedCount = $("#wns-subscriber-list input[type=\"checkbox\"]:checked").length;
+                $("#wns-current-selected").text(selectedCount);
+            }
+            
+            // Initial count update
+            updateSelectedCount();
+            
+            // Update count when checkboxes change
+            $(document).on("change", "#wns-subscriber-list input[type=\"checkbox\"]", function() {
+                updateSelectedCount();
+            });
+            
+            // Select all visible functionality
+            $("#wns-select-all-visible").change(function() {
+                $("#wns-subscriber-list .subscriber-item:visible input[type=\"checkbox\"]").prop("checked", this.checked);
+                updateSelectedCount();
             });
         });
     </script>';
