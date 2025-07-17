@@ -45,6 +45,9 @@ class WNS_Email_Templates {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="format-detection" content="telephone=no">
     <meta name="x-apple-disable-message-reformatting">
+    <meta name="color-scheme" content="light">
+    <meta name="supported-color-schemes" content="light">
+    <meta name="robots" content="noindex, nofollow">
     <title>' . esc_html($title ?: $site_name) . '</title>
     <!--[if mso]>
     <noscript>
@@ -57,23 +60,23 @@ class WNS_Email_Templates {
     <![endif]-->
 </head>
 <body style="margin: 0; padding: 0; background-color: #ffffff; font-family: Arial, Helvetica, sans-serif; line-height: 1.4; color: #333333;">
-    <!-- Preheader text for better inbox preview -->
+    <!-- Preheader text optimized for Gmail Primary tab -->
     <div style="display: none; font-size: 1px; color: #fefefe; line-height: 1px; font-family: Arial, sans-serif; max-height: 0px; max-width: 0px; opacity: 0; overflow: hidden;">
-        Newsletter from ' . esc_html($site_name) . ' - ' . esc_html(date('F j, Y')) . '
+        📚 Educational content from ' . esc_html($site_name) . ' - Learn something new today - ' . esc_html(date('F j, Y')) . '
     </div>
     
-    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f4f4f4;">
+    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #f8f9fa;">
         <tr>
             <td align="center" style="padding: 20px 0;">
-                <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border: 1px solid #dddddd; max-width: 600px;">
+                <table width="600" cellpadding="0" cellspacing="0" border="0" style="background-color: #ffffff; border: 1px solid #e9ecef; max-width: 600px; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
                     
                     <!-- Header with Text Logo -->
                     <tr>
-                        <td align="center" style="padding: 30px 20px; background-color: #ffffff; border-bottom: 1px solid #eeeeee;">
-                            <h1 style="margin: 0; color: #333333; font-size: 28px; font-weight: bold; font-family: Arial, sans-serif;">
+                        <td align="center" style="padding: 30px 20px; background: linear-gradient(135deg, #007cba 0%, #005a87 100%); color: white;">
+                            <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: bold; font-family: Arial, sans-serif; text-shadow: 0 1px 2px rgba(0,0,0,0.1);">
                                 ' . esc_html($site_name) . '
                             </h1>
-                            <p style="margin: 5px 0 0 0; font-size: 14px; color: #666666;">
+                            <p style="margin: 5px 0 0 0; font-size: 14px; color: rgba(255,255,255,0.9);">
                                 ' . esc_html(date('F j, Y')) . '
                             </p>
                         </td>
@@ -81,16 +84,19 @@ class WNS_Email_Templates {
                     
                     <!-- Content -->
                     <tr>
-                        <td style="padding: 30px;">
+                        <td style="padding: 40px 30px;">
                             ' . $content . '
                         </td>
                     </tr>
                     
                     <!-- Footer -->
                     <tr>
-                        <td style="padding: 20px; background-color: #f8f8f8; border-top: 1px solid #eeeeee; text-align: center;">
+                        <td style="padding: 25px 20px; background-color: #f8f9fa; border-top: 1px solid #e9ecef; text-align: center;">
+                            <p style="margin: 0 0 10px 0; font-size: 14px; color: #666666;">
+                                <strong>📚 Educational Newsletter</strong>
+                            </p>
                             <p style="margin: 0 0 10px 0; font-size: 12px; color: #999999;">
-                                This email was sent to you because you subscribed to our newsletter at ' . esc_html($site_domain) . '
+                                You received this educational content because you subscribed to ' . esc_html($site_name) . ' at ' . esc_html($site_domain) . '
                             </p>
                             <p style="margin: 0 0 10px 0; font-size: 14px; color: #666666;">
                                 <strong>Manage your subscription:</strong>
@@ -102,7 +108,7 @@ class WNS_Email_Templates {
                             ' . $social_links . '
                             <p style="margin: 15px 0 0 0; font-size: 11px; color: #999999; line-height: 1.3;">
                                 ' . esc_html($site_name) . ' | ' . esc_html($site_domain) . '<br>
-                                This is a promotional email. If you no longer wish to receive these emails, please unsubscribe above.<br>
+                                This is an educational newsletter providing valuable learning content. If you no longer wish to receive these updates, please unsubscribe above.<br>
                                 © ' . date('Y') . ' ' . esc_html($site_name) . '. All rights reserved.
                             </p>
                         </td>
@@ -253,57 +259,57 @@ class WNS_Email_Templates {
     }
     
     public static function get_new_post_template($post) {
-        $post_title = get_the_title($post->ID);
-        $post_url = get_permalink($post->ID);
-        $post_excerpt = has_excerpt($post->ID) ? get_the_excerpt($post->ID) : wp_trim_words(strip_tags($post->post_content), 30);
-        $post_date = get_the_date('F j, Y', $post->ID);
+        // Check for custom email title first
+        $custom_title = get_post_meta($post->ID, '_wns_custom_email_title', true);
+        $post_title = !empty($custom_title) ? $custom_title : get_the_title($post->ID);
         
-        // Get featured image if available - NO EXTERNAL IMAGES
-        $featured_image = '';
-        if (has_post_thumbnail($post->ID)) {
-            $image_url = get_the_post_thumbnail_url($post->ID, 'medium');
-            // Only include image if it's from the same domain to avoid spam filters
-            $site_domain = parse_url(home_url(), PHP_URL_HOST);
-            $image_domain = parse_url($image_url, PHP_URL_HOST);
-            
-            if ($site_domain === $image_domain) {
-                $featured_image = '
-                <div style="text-align: center; margin: 20px 0;">
-                    <img src="' . esc_url($image_url) . '" alt="' . esc_attr($post_title) . '" style="max-width: 100%; height: auto; border-radius: 4px;">
-                </div>';
-            }
+        $post_url = get_permalink($post->ID);
+        
+        // Check for custom email description first
+        $custom_description = get_post_meta($post->ID, '_wns_custom_email_description', true);
+        if (!empty($custom_description)) {
+            // Custom description is already HTML from the editor
+            $post_excerpt = wp_kses_post($custom_description);
+        } else {
+            $post_excerpt = has_excerpt($post->ID) ? get_the_excerpt($post->ID) : wp_trim_words(strip_tags($post->post_content), 30);
+            // Convert plain text to HTML paragraph
+            $post_excerpt = '<p>' . esc_html($post_excerpt) . '</p>';
         }
         
+        $post_date = get_the_date('F j, Y', $post->ID);
+        
         $content = '
-        <h2 style="color: #333333; font-size: 24px; margin: 0 0 20px 0; font-family: Arial, sans-serif;">
-            New Post Published
+        <h2 style="color: #333333; font-size: 24px; margin: 0 0 20px 0; font-family: Arial, sans-serif; line-height: 1.3;">
+            New ' . esc_html($post_title) . '
         </h2>
         
-        <h3 style="color: #333333; font-size: 20px; margin: 0 0 15px 0; font-family: Arial, sans-serif;">
-            ' . esc_html($post_title) . '
-        </h3>
-        
-        <p style="color: #666666; font-size: 14px; margin: 0 0 15px 0; font-family: Arial, sans-serif;">
+        <p style="color: #666666; font-size: 14px; margin: 0 0 20px 0; font-family: Arial, sans-serif;">
             Published on ' . esc_html($post_date) . '
         </p>
         
-        ' . $featured_image . '
+        <div style="color: #333333; font-size: 16px; margin: 0 0 30px 0; font-family: Arial, sans-serif; line-height: 1.6;">
+            <div style="margin-bottom: 20px;">
+                ' . $post_excerpt . '
+            </div>
+        </div>
         
-        <p style="color: #333333; font-size: 16px; margin: 0 0 25px 0; font-family: Arial, sans-serif; line-height: 1.5;">
-            ' . esc_html($post_excerpt) . '
-        </p>
-        
-        <table cellpadding="0" cellspacing="0" border="0" style="margin: 30px 0;">
+        <table cellpadding="0" cellspacing="0" border="0" style="margin: 30px auto; text-align: center;">
             <tr>
-                <td style="background-color: #0066cc; padding: 12px 24px; border-radius: 4px;">
-                    <a href="' . esc_url($post_url) . '" style="color: #ffffff; text-decoration: none; font-weight: bold; font-size: 16px; font-family: Arial, sans-serif; display: block;">
-                        Read Full Article
+                <td style="background-color: #007cba; padding: 15px 30px; border-radius: 6px; text-align: center;">
+                    <a href="' . esc_url($post_url) . '" style="color: #ffffff; text-decoration: none; font-weight: bold; font-size: 18px; font-family: Arial, sans-serif; display: inline-block;">
+                        📖 Read Full Article
                     </a>
                 </td>
             </tr>
-        </table>';
+        </table>
         
-        return self::get_email_wrapper($content, 'New Post: ' . $post_title);
+        <div style="margin: 30px 0; padding: 20px; background-color: #f8f9fa; border-left: 4px solid #007cba; border-radius: 4px;">
+            <p style="margin: 0; color: #495057; font-size: 14px; font-family: Arial, sans-serif;">
+                💡 <strong>Enjoying our content?</strong> Share this article with your network and help others discover valuable insights!
+            </p>
+        </div>';
+        
+        return self::get_email_wrapper($content, 'New Article: ' . $post_title);
     }
     
     public static function get_newsletter_template($subject, $content) {

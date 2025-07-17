@@ -63,7 +63,7 @@ function wns_register_settings() {
 
     register_setting('wns_settings_group', 'wns_template_new_post_subject', array(
         'type' => 'string',
-        'default' => __('New Blog Post: {post_title}', 'wp-newsletter-subscription')
+        'default' => __('📚 New Tutorial: {post_title}', 'wp-newsletter-subscription')
     ));
 
     register_setting('wns_settings_group', 'wns_template_new_post_body', array(
@@ -267,7 +267,10 @@ function wns_render_settings_page() {
                 </tr>
                 <tr valign="top">
                     <th scope="row"><?php _e('New Post Email Subject', 'wp-newsletter-subscription'); ?></th>
-                    <td><input type="text" name="wns_template_new_post_subject" value="<?php echo esc_attr(get_option('wns_template_new_post_subject', __('New Blog Post: {post_title}', 'wp-newsletter-subscription'))); ?>" class="regular-text" /></td>
+                    <td>
+                        <input type="text" name="wns_template_new_post_subject" value="<?php echo esc_attr(get_option('wns_template_new_post_subject', __('📚 New Tutorial: {post_title}', 'wp-newsletter-subscription'))); ?>" class="regular-text" />
+                        <p class="description"><?php _e('Use {post_title} placeholder. You can also customize title per post in the post editor.', 'wp-newsletter-subscription'); ?></p>
+                    </td>
                 </tr>
             </table>
 

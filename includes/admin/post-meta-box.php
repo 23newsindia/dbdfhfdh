@@ -31,6 +31,10 @@ function wns_render_post_newsletter_meta_box($post) {
     $selected_subscribers = get_post_meta($post->ID, '_wns_selected_subscribers', true);
     $already_sent = get_post_meta($post->ID, '_wns_notification_sent', true);
     
+    // Get custom email fields
+    $custom_email_title = get_post_meta($post->ID, '_wns_custom_email_title', true);
+    $custom_email_description = get_post_meta($post->ID, '_wns_custom_email_description', true);
+    
     // Default to enabled for new posts
     if ($auto_send_enabled === '') {
         $auto_send_enabled = get_option('wns_enable_new_post_notification', false) ? '1' : '0';
@@ -59,6 +63,55 @@ function wns_render_post_newsletter_meta_box($post) {
                 </p>
             </div>
         <?php endif; ?>
+        
+        <!-- Custom Email Content Section -->
+        <div style="background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
+            <h4 style="margin: 0 0 15px 0; color: #495057;">📧 Custom Email Content</h4>
+            
+            <div style="margin-bottom: 15px;">
+                <label for="wns_custom_email_title" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                    <?php _e('Custom Email Title:', 'wp-newsletter-subscription'); ?>
+                </label>
+                <input type="text" 
+                       id="wns_custom_email_title" 
+                       name="wns_custom_email_title" 
+                       value="<?php echo esc_attr($custom_email_title); ?>" 
+                       placeholder="<?php echo esc_attr(get_the_title($post->ID) ?: 'Post title will be used'); ?>"
+                       style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px;" />
+                <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">
+                    <?php _e('Leave blank to use the post title automatically.', 'wp-newsletter-subscription'); ?>
+                </p>
+            </div>
+            
+            <div style="margin-bottom: 10px;">
+                <label for="wns_custom_email_description" style="display: block; font-weight: bold; margin-bottom: 5px;">
+                    <?php _e('Custom Email Description:', 'wp-newsletter-subscription'); ?>
+                </label>
+                <?php
+                wp_editor($custom_email_description, 'wns_custom_email_description', array(
+                    'textarea_name' => 'wns_custom_email_description',
+                    'media_buttons' => false,
+                    'textarea_rows' => 6,
+                    'teeny' => true,
+                    'quicktags' => array(
+                        'buttons' => 'strong,em,link,ul,ol,li,close'
+                    ),
+                    'tinymce' => array(
+                        'toolbar1' => 'bold,italic,underline,link,unlink,bullist,numlist,undo,redo',
+                        'toolbar2' => '',
+                        'height' => 150,
+                        'resize' => true,
+                        'menubar' => false,
+                        'statusbar' => false,
+                        'content_style' => 'body { font-family: Arial, sans-serif; font-size: 14px; line-height: 1.5; }'
+                    )
+                ));
+                ?>
+                <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">
+                    <?php _e('HTML editor for rich email content. Press Enter twice for new paragraphs. Leave blank to use post excerpt. Supports: bold, italic, links, lists, blockquotes.', 'wp-newsletter-subscription'); ?>
+                </p>
+            </div>
+        </div>
         
         <div style="margin-bottom: 15px;">
             <label style="display: flex; align-items: center; font-weight: bold;">
@@ -298,6 +351,13 @@ function wns_save_post_newsletter_meta($post_id) {
         $selected_subscribers = array_filter($selected_subscribers, 'is_email');
         update_post_meta($post_id, '_wns_selected_subscribers', $selected_subscribers);
     }
+    
+    // Save custom email fields
+    $custom_email_title = isset($_POST['wns_custom_email_title']) ? sanitize_text_field($_POST['wns_custom_email_title']) : '';
+    $custom_email_description = isset($_POST['wns_custom_email_description']) ? sanitize_textarea_field($_POST['wns_custom_email_description']) : '';
+    
+    update_post_meta($post_id, '_wns_custom_email_title', $custom_email_title);
+    update_post_meta($post_id, '_wns_custom_email_description', $custom_email_description);
     
     // Handle "Send Newsletter on Save" option
     if (isset($_POST['wns_send_on_save']) && $_POST['wns_send_on_save'] === '1') {

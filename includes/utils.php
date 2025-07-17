@@ -54,13 +54,23 @@ if (!function_exists('wns_get_standard_email_headers')) {
             'Precedence: bulk',
             'Auto-Submitted: auto-generated',
             
-            // Gmail-specific headers
+            // Gmail-specific headers for better inbox delivery
             'X-Google-Original-From: ' . $admin_email,
             'X-Auto-Response-Suppress: All',
+            'X-Entity-ID: <newsletter@' . $site_domain . '>',
+            'X-Google-Appengine-App-Id: educational-newsletter',
+            'X-Email-Type-Id: educational-content',
+            'X-Newsletter-Type: educational',
             
             // Campaign tracking
-            'X-Campaign-ID: newsletter-' . date('Y-m-d'),
+            'X-Campaign-ID: educational-newsletter-' . date('Y-m-d'),
             'X-Mailer-LID: ' . md5($site_domain . date('Y-m-d')),
+            
+            // Anti-spam headers
+            'X-Spam-Status: No',
+            'X-Authenticated-Sender: ' . $admin_email,
+            'X-Content-Category: educational',
+            'X-Message-Flag: educational-content',
             
             // Security headers
             'X-Content-Type-Options: nosniff'

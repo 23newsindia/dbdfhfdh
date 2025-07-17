@@ -194,7 +194,11 @@ function wns_send_post_newsletter_manual($post_id, $send_to_selected = '0', $sel
     // Generate email content
     require_once WNS_PLUGIN_DIR . 'includes/email-templates.php';
     
-    $subject = str_replace('{post_title}', sanitize_text_field($post->post_title), get_option('wns_template_new_post_subject', 'New Post: {post_title}'));
+    // Get custom title or use post title
+    $custom_title = get_post_meta($post_id, '_wns_custom_email_title', true);
+    $email_title = !empty($custom_title) ? $custom_title : $post->post_title;
+    
+    $subject = str_replace('{post_title}', sanitize_text_field($email_title), get_option('wns_template_new_post_subject', '📰 New Article: {post_title}'));
     $email_content = WNS_Email_Templates::get_new_post_template($post);
     
     error_log('WNS Debug: Email subject: ' . $subject);
