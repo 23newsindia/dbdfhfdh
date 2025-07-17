@@ -57,7 +57,8 @@ class WNS_Email_Queue_List_Table extends WP_List_Table {
     function get_bulk_actions() {
         return array(
             'delete' => __('Delete', 'wp-newsletter-subscription'),
-            'resend' => __('Mark for Resend', 'wp-newsletter-subscription')
+            'resend' => __('Mark for Resend', 'wp-newsletter-subscription'),
+            'delete_all_pending' => __('Delete All Pending', 'wp-newsletter-subscription')
         );
     }
 
@@ -118,7 +119,13 @@ class WNS_Email_Queue_List_Table extends WP_List_Table {
             $order = strtoupper(sanitize_text_field($_REQUEST['order']));
         }
 
-        $per_page = 20;
+        // Allow different per-page options
+        $allowed_per_page = [20, 50, 100, 200, 500];
+        $per_page = 20; // default
+        if (!empty($_REQUEST['per_page']) && in_array((int)$_REQUEST['per_page'], $allowed_per_page)) {
+            $per_page = (int)$_REQUEST['per_page'];
+        }
+        
         $current_page = $this->get_pagenum();
 
         // Count total items
@@ -148,7 +155,44 @@ class WNS_Email_Queue_List_Table extends WP_List_Table {
     }
 
     public function process_bulk_action() {
-        if (!isset($_REQUEST['action']) || !isset($_REQUEST['email'])) {
+        $action = isset($_REQUEST['action']) ? sanitize_text_field($_REQUEST['action']) : '';
+        
+        // Handle delete all pending action (doesn't need selected items)
+        if ($action === 'delete_all_pending') {
+            // Verify nonce
+            if (!wp_verify_nonce($_REQUEST['_wpnonce'], 'bulk-' . $this->_args['plural'])) {
+                wp_die(__('Security check failed.', 'wp-newsletter-subscription'));
+            }
+            
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'newsletter_email_queue';
+            
+            // Get count first for confirmation
+            $pending_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM `$table_name` WHERE `sent` = %d", 0));
+            
+            if ($pending_count > 0) {
+                $deleted = $wpdb->query($wpdb->prepare("DELETE FROM `$table_name` WHERE `sent` = %d", 0));
+                
+                if ($deleted !== false) {
+                    // Add admin notice
+                    add_action('admin_notices', function() use ($pending_count) {
+                        echo '<div class="notice notice-success is-dismissible">';
+                        echo '<p><strong>' . sprintf(__('%d pending emails have been deleted from the queue.', 'wp-newsletter-subscription'), $pending_count) . '</strong></p>';
+                        echo '</div>';
+                    });
+                } else {
+                    add_action('admin_notices', function() {
+                        echo '<div class="notice notice-error is-dismissible">';
+                        echo '<p><strong>' . __('Error deleting pending emails.', 'wp-newsletter-subscription') . '</strong></p>';
+                        echo '</div>';
+                    });
+                }
+            }
+            return;
+        }
+        
+        // Handle regular bulk actions that need selected items
+        if (!isset($_REQUEST['email'])) {
             return;
         }
 
@@ -157,7 +201,6 @@ class WNS_Email_Queue_List_Table extends WP_List_Table {
             wp_die(__('Security check failed.', 'wp-newsletter-subscription'));
         }
 
-        $action = sanitize_text_field($_REQUEST['action']);
         $ids = array_map('absint', (array)$_REQUEST['email']);
         $ids = array_filter($ids); // Remove any zero values
         
@@ -181,7 +224,12 @@ class WNS_Email_Queue_List_Table extends WP_List_Table {
 
     function extra_tablenav($which) {
         if ($which === 'top') {
+            global $wpdb;
+            $table_name = $wpdb->prefix . 'newsletter_email_queue';
+            $pending_count = $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM `$table_name` WHERE `sent` = %d", 0));
+            
             $status = isset($_REQUEST['status']) ? sanitize_text_field($_REQUEST['status']) : '';
+            $current_per_page = isset($_REQUEST['per_page']) ? (int)$_REQUEST['per_page'] : 20;
             ?>
             <div class="alignleft actions">
                 <label for="filter-by-status" class="screen-reader-text"><?php esc_html_e('Filter by status', 'wp-newsletter-subscription'); ?></label>
@@ -190,8 +238,33 @@ class WNS_Email_Queue_List_Table extends WP_List_Table {
                     <option value="pending" <?php selected($status, 'pending'); ?>><?php esc_html_e('Pending', 'wp-newsletter-subscription'); ?></option>
                     <option value="sent" <?php selected($status, 'sent'); ?>><?php esc_html_e('Sent', 'wp-newsletter-subscription'); ?></option>
                 </select>
+                
+                <label for="per-page" style="margin-left: 15px;"><?php esc_html_e('Show:', 'wp-newsletter-subscription'); ?></label>
+                <select name="per_page" id="per-page">
+                    <option value="20" <?php selected($current_per_page, 20); ?>>20 per page</option>
+                    <option value="50" <?php selected($current_per_page, 50); ?>>50 per page</option>
+                    <option value="100" <?php selected($current_per_page, 100); ?>>100 per page</option>
+                    <option value="200" <?php selected($current_per_page, 200); ?>>200 per page</option>
+                    <option value="500" <?php selected($current_per_page, 500); ?>>500 per page</option>
+                </select>
+                
                 <?php submit_button(__('Filter', 'wp-newsletter-subscription'), '', 'filter_action', false); ?>
             </div>
+            
+            <?php if ($pending_count > 0): ?>
+            <div class="alignright actions" style="margin-left: 20px;">
+                <div style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 10px 15px; border-radius: 4px; display: inline-block;">
+                    <strong style="color: #856404;">⏳ <?php echo $pending_count; ?> Pending Emails</strong>
+                    <form method="post" style="display: inline-block; margin-left: 10px;" onsubmit="return confirm('<?php echo esc_js(sprintf(__('Are you sure you want to delete all %d pending emails from the queue? This action cannot be undone.', 'wp-newsletter-subscription'), $pending_count)); ?>');">
+                        <?php wp_nonce_field('bulk-' . $this->_args['plural']); ?>
+                        <input type="hidden" name="action" value="delete_all_pending" />
+                        <button type="submit" class="button button-secondary" style="background: #dc3545; color: white; border-color: #dc3545;">
+                            🗑️ Delete All Pending
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <?php endif; ?>
             <?php
         }
     }

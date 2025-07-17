@@ -234,13 +234,32 @@ function wns_render_post_newsletter_meta_box($post) {
             // Create modal HTML
             var modal = $('<div id="wns-subscriber-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; align-items: center; justify-content: center;"></div>');
             var content = $('<div style="background: white; width: 90%; max-width: 700px; max-height: 90%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></div>');
-            var header = $('<div style="padding: 20px; border-bottom: 1px solid #ddd; background: #f8f9fa;"><h3 style="margin: 0 0 15px 0;">Select Subscribers</h3><div style="position: relative;"><input type="text" id="wns-subscriber-search" placeholder="Search subscribers by email..." style="width: 100%; padding: 10px 40px 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;" /><span style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); color: #666; pointer-events: none;">🔍</span></div></div>');
+            var header = $('<div style="padding: 20px; border-bottom: 1px solid #ddd; background: #f8f9fa; position: relative;"><button type="button" onclick="wns_close_subscriber_modal()" style="position: absolute; top: 15px; right: 15px; background: none; border: none; font-size: 24px; cursor: pointer; color: #666; padding: 5px; line-height: 1;" title="Close">&times;</button><h3 style="margin: 0 0 15px 0; padding-right: 40px;">Select Subscribers</h3><div style="position: relative;"><input type="text" id="wns-subscriber-search" placeholder="Search subscribers by email..." style="width: 100%; padding: 10px 40px 10px 15px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;" /><span style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); color: #666; pointer-events: none;">🔍</span></div></div>');
             var body = $('<div style="padding: 20px; max-height: 500px; overflow-y: auto;"><div class="loading">Loading subscribers...</div></div>');
             var footer = $('<div style="padding: 20px; border-top: 1px solid #ddd; background: #f8f9fa; text-align: right;"><button class="button button-secondary" onclick="wns_close_subscriber_modal()">Cancel</button> <button class="button button-primary" onclick="wns_save_selected_subscribers()">Save Selection</button></div>');
             
             content.append(header, body, footer);
             modal.append(content);
             $('body').append(modal);
+            
+            // Close modal when clicking outside the content area
+            modal.on('click', function(e) {
+                if (e.target === this) {
+                    wns_close_subscriber_modal();
+                }
+            });
+            
+            // Close modal when pressing Escape key
+            $(document).on('keydown.wns-modal', function(e) {
+                if (e.keyCode === 27) { // Escape key
+                    wns_close_subscriber_modal();
+                }
+            });
+            
+            // Prevent modal content clicks from closing the modal
+            content.on('click', function(e) {
+                e.stopPropagation();
+            });
             
             // Load subscribers via AJAX
             $.post(ajaxurl, {
@@ -287,12 +306,14 @@ function wns_render_post_newsletter_meta_box($post) {
         };
         
         window.wns_close_subscriber_modal = function() {
+            // Remove keydown event listener
+            $(document).off('keydown.wns-modal');
             $('#wns-subscriber-modal').remove();
         };
         
         window.wns_save_selected_subscribers = function() {
             var selected = [];
-            $('#wns-subscriber-modal input[type="checkbox"]:checked').each(function() {
+            $('#wns-subscriber-modal #wns-subscriber-list input[type="checkbox"]:checked').each(function() {
                 selected.push($(this).val());
             });
             
@@ -303,12 +324,7 @@ function wns_render_post_newsletter_meta_box($post) {
             
             var preview = '';
             if (selected.length > 0) {
-                // Get the actual email addresses from the checkboxes
-                var emails = [];
-                $('#wns-subscriber-modal input[type="checkbox"]:checked').each(function() {
-                    emails.push($(this).val());
-                });
-                preview = emails.slice(0, 3).join(', ');
+                preview = selected.slice(0, 3).join(', ');
                 if (selected.length > 3) {
                     preview += '... and ' + (selected.length - 3) + ' more';
                 }
@@ -504,23 +520,59 @@ function wns_ajax_get_subscribers_for_selection() {
     
     $html .= '<script>
         jQuery(function($) {
+            // Real-time update of selected count
             // Update selected count when checkboxes change
             function updateSelectedCount() {
                 var selectedCount = $("#wns-subscriber-list input[type=\"checkbox\"]:checked").length;
                 $("#wns-current-selected").text(selectedCount);
+                
+                // Also update the "Select All" checkbox state
+                var totalVisible = $("#wns-subscriber-list .subscriber-item:visible").length;
+                var selectedVisible = $("#wns-subscriber-list .subscriber-item:visible input[type=\"checkbox\"]:checked").length;
+                
+                if (selectedVisible === 0) {
+                    $("#wns-select-all-visible").prop("checked", false).prop("indeterminate", false);
+                } else if (selectedVisible === totalVisible) {
+                    $("#wns-select-all-visible").prop("checked", true).prop("indeterminate", false);
+                } else {
+                    $("#wns-select-all-visible").prop("checked", false).prop("indeterminate", true);
+                }
             }
             
             // Initial count update
             updateSelectedCount();
             
-            // Update count when checkboxes change
+            // Update count when individual checkboxes change
             $(document).on("change", "#wns-subscriber-list input[type=\"checkbox\"]", function() {
                 updateSelectedCount();
             });
             
             // Select all visible functionality
             $("#wns-select-all-visible").change(function() {
-                $("#wns-subscriber-list .subscriber-item:visible input[type=\"checkbox\"]").prop("checked", this.checked);
+                var isChecked = $(this).prop("checked");
+                $("#wns-subscriber-list .subscriber-item:visible input[type=\"checkbox\"]").prop("checked", isChecked);
+                updateSelectedCount();
+            });
+            
+            // Update search functionality to maintain selection state
+            $("#wns-subscriber-search").on("input", function() {
+                var searchTerm = $(this).val().toLowerCase();
+                var visibleCount = 0;
+                
+                $("#wns-subscriber-list .subscriber-item").each(function() {
+                    var email = $(this).find("input[type=\"checkbox\"]").val().toLowerCase();
+                    if (email.includes(searchTerm)) {
+                        $(this).show();
+                        visibleCount++;
+                    } else {
+                        $(this).hide();
+                    }
+                });
+                
+                // Update visible count
+                $("#wns-visible-count").text("(" + visibleCount + " shown)");
+                
+                // Update selected count and select all state
                 updateSelectedCount();
             });
         });
