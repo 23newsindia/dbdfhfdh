@@ -71,6 +71,16 @@ function wns_render_post_newsletter_meta_box($post) {
         </div>
         
         <div style="margin-bottom: 15px;">
+            <label style="display: flex; align-items: center; font-weight: bold;">
+                <input type="checkbox" name="wns_send_on_save" value="1" style="margin-right: 8px;" />
+                <?php _e('Send Newsletter on Save', 'wp-newsletter-subscription'); ?>
+            </label>
+            <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">
+                <?php _e('Send newsletter immediately when you save/update this post (even if not published yet).', 'wp-newsletter-subscription'); ?>
+            </p>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
             <label style="font-weight: bold; display: block; margin-bottom: 8px;">
                 <?php _e('Send To:', 'wp-newsletter-subscription'); ?>
             </label>
@@ -142,105 +152,109 @@ function wns_render_post_newsletter_meta_box($post) {
     </style>
     
     <script>
-    jQuery(document).ready(function($) {
-        // Toggle subscriber selection visibility
-        $('input[name="wns_send_to_selected"]').change(function() {
-            if ($(this).val() === '1') {
-                $('#wns-subscriber-selection').show();
+    (function($) {
+        $(document).ready(function() {
+            // Toggle subscriber selection visibility
+            $('input[name="wns_send_to_selected"]').change(function() {
+                if ($(this).val() === '1') {
+                    $('#wns-subscriber-selection').show();
+                } else {
+                    $('#wns-subscriber-selection').hide();
+                }
+            });
+            
+            // Open subscriber selection modal
+            $('#wns-select-subscribers-btn').click(function() {
+                wns_open_subscriber_modal();
+            });
+            
+            // Send newsletter now
+            $('#wns-send-now-btn').click(function() {
+                if (confirm('<?php echo esc_js(__('Send newsletter to selected subscribers now?', 'wp-newsletter-subscription')); ?>')) {
+                    wns_send_newsletter_now();
+                }
+            });
+        });
+        
+        // Modal functions
+        window.wns_open_subscriber_modal = function() {
+            // Create modal HTML
+            var modal = $('<div id="wns-subscriber-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; align-items: center; justify-content: center;"></div>');
+            var content = $('<div style="background: white; width: 80%; max-width: 600px; max-height: 80%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></div>');
+            var header = $('<div style="padding: 20px; border-bottom: 1px solid #ddd; background: #f8f9fa;"><h3 style="margin: 0;">Select Subscribers</h3></div>');
+            var body = $('<div style="padding: 20px; max-height: 400px; overflow-y: auto;"><div class="loading">Loading subscribers...</div></div>');
+            var footer = $('<div style="padding: 20px; border-top: 1px solid #ddd; background: #f8f9fa; text-align: right;"><button class="button button-secondary" onclick="wns_close_subscriber_modal()">Cancel</button> <button class="button button-primary" onclick="wns_save_selected_subscribers()">Save Selection</button></div>');
+            
+            content.append(header, body, footer);
+            modal.append(content);
+            $('body').append(modal);
+            
+            // Load subscribers via AJAX
+            $.post(ajaxurl, {
+                action: 'wns_get_subscribers_for_selection',
+                nonce: '<?php echo wp_create_nonce('wns_get_subscribers'); ?>',
+                selected: JSON.parse($('#wns-selected-subscribers-input').val() || '[]')
+            }, function(response) {
+                if (response.success) {
+                    body.html(response.data.html);
+                } else {
+                    body.html('<p style="color: red;">Error loading subscribers.</p>');
+                }
+            });
+        };
+        
+        window.wns_close_subscriber_modal = function() {
+            $('#wns-subscriber-modal').remove();
+        };
+        
+        window.wns_save_selected_subscribers = function() {
+            var selected = [];
+            $('#wns-subscriber-modal input[type="checkbox"]:checked').each(function() {
+                selected.push($(this).val());
+            });
+            
+            $('#wns-selected-subscribers-input').val(JSON.stringify(selected));
+            
+            // Update preview
+            $('#wns-selected-count').text(selected.length > 0 ? '(' + selected.length + ' selected)' : '');
+            
+            var preview = '';
+            if (selected.length > 0) {
+                preview = selected.slice(0, 3).join(', ');
+                if (selected.length > 3) {
+                    preview += '... and ' + (selected.length - 3) + ' more';
+                }
             } else {
-                $('#wns-subscriber-selection').hide();
+                preview = 'None selected';
             }
-        });
+            $('#wns-selected-preview').text(preview);
+            
+            wns_close_subscriber_modal();
+        };
         
-        // Open subscriber selection modal
-        $('#wns-select-subscribers-btn').click(function() {
-            wns_open_subscriber_modal();
-        });
+        window.wns_send_newsletter_now = function() {
+            var button = $('#wns-send-now-btn');
+            button.prop('disabled', true).text('Sending...');
+            
+            $.post(ajaxurl, {
+                action: 'wns_send_post_newsletter_now',
+                post_id: <?php echo $post->ID; ?>,
+                nonce: '<?php echo wp_create_nonce('wns_send_now_' . $post->ID); ?>',
+                send_to_selected: $('input[name="wns_send_to_selected"]:checked').val(),
+                selected_subscribers: $('#wns-selected-subscribers-input').val()
+            }, function(response) {
+                if (response.success) {
+                    button.text('✅ Sent!').css('background', '#28a745');
+                    alert('Newsletter sent successfully!');
+                    location.reload();
+                } else {
+                    button.prop('disabled', false).text('📧 Send Newsletter Now');
+                    alert('Error: ' + response.data.message);
+                }
+            });
+        };
         
-        // Send newsletter now
-        $('#wns-send-now-btn').click(function() {
-            if (confirm('<?php echo esc_js(__('Send newsletter to selected subscribers now?', 'wp-newsletter-subscription')); ?>')) {
-                wns_send_newsletter_now();
-            }
-        });
-    });
-    
-    function wns_open_subscriber_modal() {
-        // Create modal HTML
-        var modal = $('<div id="wns-subscriber-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 999999; display: flex; align-items: center; justify-content: center;"></div>');
-        var content = $('<div style="background: white; width: 80%; max-width: 600px; max-height: 80%; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.3);"></div>');
-        var header = $('<div style="padding: 20px; border-bottom: 1px solid #ddd; background: #f8f9fa;"><h3 style="margin: 0;">Select Subscribers</h3></div>');
-        var body = $('<div style="padding: 20px; max-height: 400px; overflow-y: auto;"><div class="loading">Loading subscribers...</div></div>');
-        var footer = $('<div style="padding: 20px; border-top: 1px solid #ddd; background: #f8f9fa; text-align: right;"><button class="button button-secondary" onclick="wns_close_subscriber_modal()">Cancel</button> <button class="button button-primary" onclick="wns_save_selected_subscribers()">Save Selection</button></div>');
-        
-        content.append(header, body, footer);
-        modal.append(content);
-        $('body').append(modal);
-        
-        // Load subscribers via AJAX
-        $.post(ajaxurl, {
-            action: 'wns_get_subscribers_for_selection',
-            nonce: '<?php echo wp_create_nonce('wns_get_subscribers'); ?>',
-            selected: JSON.parse($('#wns-selected-subscribers-input').val() || '[]')
-        }, function(response) {
-            if (response.success) {
-                body.html(response.data.html);
-            } else {
-                body.html('<p style="color: red;">Error loading subscribers.</p>');
-            }
-        });
-    }
-    
-    function wns_close_subscriber_modal() {
-        $('#wns-subscriber-modal').remove();
-    }
-    
-    function wns_save_selected_subscribers() {
-        var selected = [];
-        $('#wns-subscriber-modal input[type="checkbox"]:checked').each(function() {
-            selected.push($(this).val());
-        });
-        
-        $('#wns-selected-subscribers-input').val(JSON.stringify(selected));
-        
-        // Update preview
-        $('#wns-selected-count').text(selected.length > 0 ? '(' + selected.length + ' selected)' : '');
-        
-        var preview = '';
-        if (selected.length > 0) {
-            preview = selected.slice(0, 3).join(', ');
-            if (selected.length > 3) {
-                preview += '... and ' + (selected.length - 3) + ' more';
-            }
-        } else {
-            preview = 'None selected';
-        }
-        $('#wns-selected-preview').text(preview);
-        
-        wns_close_subscriber_modal();
-    }
-    
-    function wns_send_newsletter_now() {
-        var button = $('#wns-send-now-btn');
-        button.prop('disabled', true).text('Sending...');
-        
-        $.post(ajaxurl, {
-            action: 'wns_send_post_newsletter_now',
-            post_id: <?php echo $post->ID; ?>,
-            nonce: '<?php echo wp_create_nonce('wns_send_now_' . $post->ID); ?>',
-            send_to_selected: $('input[name="wns_send_to_selected"]:checked').val(),
-            selected_subscribers: $('#wns-selected-subscribers-input').val()
-        }, function(response) {
-            if (response.success) {
-                button.text('✅ Sent!').css('background', '#28a745');
-                alert('Newsletter sent successfully!');
-                location.reload();
-            } else {
-                button.prop('disabled', false).text('📧 Send Newsletter Now');
-                alert('Error: ' + response.data.message);
-            }
-        });
-    }
+    })(jQuery);
     </script>
     <?php
 }
@@ -278,6 +292,36 @@ function wns_save_post_newsletter_meta($post_id) {
         $selected_subscribers = array_map('sanitize_email', $selected_subscribers);
         $selected_subscribers = array_filter($selected_subscribers, 'is_email');
         update_post_meta($post_id, '_wns_selected_subscribers', $selected_subscribers);
+    }
+    
+    // Handle "Send Newsletter on Save" option
+    if (isset($_POST['wns_send_on_save']) && $_POST['wns_send_on_save'] === '1') {
+        // Check if already sent to prevent duplicates
+        $already_sent = get_post_meta($post_id, '_wns_notification_sent', true);
+        
+        if (!$already_sent) {
+            // Send newsletter immediately
+            $result = wns_send_post_newsletter_manual($post_id, $send_to_selected, $selected_subscribers);
+            
+            if ($result['success']) {
+                // Mark as sent
+                update_post_meta($post_id, '_wns_notification_sent', true);
+                
+                // Add admin notice
+                add_action('admin_notices', function() use ($result) {
+                    echo '<div class="notice notice-success is-dismissible">';
+                    echo '<p><strong>Newsletter Sent!</strong> ' . esc_html($result['message']) . '</p>';
+                    echo '</div>';
+                });
+            } else {
+                // Add error notice
+                add_action('admin_notices', function() use ($result) {
+                    echo '<div class="notice notice-error is-dismissible">';
+                    echo '<p><strong>Newsletter Error:</strong> ' . esc_html($result['message']) . '</p>';
+                    echo '</div>';
+                });
+            }
+        }
     }
 }
 
@@ -333,8 +377,10 @@ function wns_ajax_get_subscribers_for_selection() {
     $html .= '</div>';
     
     $html .= '<script>
-        jQuery("#wns-select-all").change(function() {
-            jQuery("#wns-subscriber-modal input[type=\"checkbox\"]").not(this).prop("checked", this.checked);
+        jQuery(function($) {
+            $("#wns-select-all").change(function() {
+                $("#wns-subscriber-modal input[type=\"checkbox\"]").not(this).prop("checked", this.checked);
+            });
         });
     </script>';
     

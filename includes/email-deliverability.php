@@ -120,7 +120,11 @@ class WNS_Email_Deliverability {
         
         // Set timeout values
         $phpmailer->Timeout = 30;
-        $phpmailer->SMTPTimeout = 30;
+        
+        // Check if SMTPTimeout property exists before setting it
+        if (property_exists($phpmailer, 'SMTPTimeout')) {
+            $phpmailer->SMTPTimeout = 30;
+        }
         
         // Add custom Message-ID for tracking
         $domain = parse_url(home_url(), PHP_URL_HOST);
@@ -187,7 +191,7 @@ class WNS_Email_Deliverability {
         $content = preg_replace('/\?{2,}/', '?', $content);
         
         // Remove excessive capitalization
-        $content = preg_replace('/[A-Z]{4,}/', function($matches) {
+        $content = preg_replace_callback('/[A-Z]{4,}/', function($matches) {
             return ucfirst(strtolower($matches[0]));
         }, $content);
         
