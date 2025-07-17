@@ -45,15 +45,34 @@ function wns_process_email_queue() {
 
     // Check if table exists before querying with prepared statement
     if ($wpdb->get_var($wpdb->prepare("SHOW TABLES LIKE %s", $queue_table)) != $queue_table) {
+        error_log('WNS Debug: Email queue table does not exist');
         return; // Table doesn't exist, skip processing
     }
 
-    // Add delay between batches to avoid overwhelming mail servers
+    // Check for pending emails first before applying rate limiting
+    $pending_count = $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT COUNT(*) FROM `$queue_table` WHERE send_at <= %s AND sent = %d",
+            date('Y-m-d H:i:s', $now),
+            0
+        )
+    );
+    
+    if ($pending_count == 0) {
+        error_log('WNS Debug: No pending emails found in queue');
+        return; // No emails to process
+    }
+    
+    error_log('WNS Debug: Found ' . $pending_count . ' pending emails in queue');
+    
+    // Add delay between batches to avoid overwhelming mail servers (but allow immediate processing for new emails)
     $last_batch_time = get_transient('wns_last_batch_time');
     $min_interval = get_option('wns_email_send_interval_minutes', 5) * 60; // Convert to seconds
     
-    if ($last_batch_time && (time() - $last_batch_time) < $min_interval) {
-        return; // Too soon since last batch
+    // Only apply rate limiting if we have processed emails recently AND there are many pending emails
+    if ($last_batch_time && (time() - $last_batch_time) < $min_interval && $pending_count > $batch_size) {
+        error_log('WNS Debug: Rate limiting applied - too soon since last batch (' . (time() - $last_batch_time) . ' seconds ago), skipping large batch');
+        return; // Too soon since last batch for large batches
     }
 
     // Get all pending emails with prepared statement
@@ -71,10 +90,14 @@ function wns_process_email_queue() {
     if (!$emails || $wpdb->last_error) {
         if ($wpdb->last_error) {
             error_log('WNS Plugin Error in email queue processing: ' . $wpdb->last_error);
+        } else {
+            error_log('WNS Debug: No pending emails found in queue');
         }
         return;
     }
 
+    error_log('WNS Debug: Processing ' . count($emails) . ' emails from queue');
+    
     $successful_sends = 0;
     $failed_sends = 0;
     
@@ -90,6 +113,7 @@ function wns_process_email_queue() {
                 array('%d')
             );
             $failed_sends++;
+            error_log('WNS Debug: Invalid email address: ' . $email->recipient);
             continue;
         }
 
@@ -114,6 +138,8 @@ function wns_process_email_queue() {
             sleep(2); // 2 second pause every 10 emails
         }
 
+        error_log('WNS Debug: Attempting to send email to: ' . $email->recipient . ' with subject: ' . $email->subject);
+        
         // Send email with enhanced error handling
         $sent = wp_mail(
             sanitize_email($email->recipient), 
@@ -126,9 +152,11 @@ function wns_process_email_queue() {
         if ($sent) {
             wns_log_email_activity($email->recipient, 'sent_via_queue', 'Email sent successfully via queue');
             $successful_sends++;
+            error_log('WNS Debug: Email sent successfully to: ' . $email->recipient);
         } else {
             wns_log_email_activity($email->recipient, 'failed_via_queue', 'Email failed to send via queue');
             $failed_sends++;
+            error_log('WNS Debug: Email failed to send to: ' . $email->recipient);
         }
 
         // Mark as sent regardless of success to prevent infinite retries
@@ -150,10 +178,12 @@ function wns_process_email_queue() {
     }
     
     // Adjust future batch sizes based on success rate
-    $success_rate = $successful_sends / ($successful_sends + $failed_sends + 1);
-    if ($success_rate < 0.8) {
-        // Reduce batch size if success rate is low
-        $new_batch_size = max(10, $base_batch_size * 0.8);
-        update_option('wns_email_batch_size', $new_batch_size);
+    if (($successful_sends + $failed_sends) > 0) {
+        $success_rate = $successful_sends / ($successful_sends + $failed_sends);
+        if ($success_rate < 0.8) {
+            // Reduce batch size if success rate is low
+            $new_batch_size = max(10, $base_batch_size * 0.8);
+            update_option('wns_email_batch_size', $new_batch_size);
+        }
     }
 }

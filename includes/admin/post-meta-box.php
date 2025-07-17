@@ -220,7 +220,12 @@ function wns_render_post_newsletter_meta_box($post) {
             
             var preview = '';
             if (selected.length > 0) {
-                preview = selected.slice(0, 3).join(', ');
+                // Get the actual email addresses from the checkboxes
+                var emails = [];
+                $('#wns-subscriber-modal input[type="checkbox"]:checked').each(function() {
+                    emails.push($(this).val());
+                });
+                preview = emails.slice(0, 3).join(', ');
                 if (selected.length > 3) {
                     preview += '... and ' + (selected.length - 3) + ' more';
                 }
@@ -296,32 +301,60 @@ function wns_save_post_newsletter_meta($post_id) {
     
     // Handle "Send Newsletter on Save" option
     if (isset($_POST['wns_send_on_save']) && $_POST['wns_send_on_save'] === '1') {
-        // Check if already sent to prevent duplicates
-        $already_sent = get_post_meta($post_id, '_wns_notification_sent', true);
+        error_log('WNS Debug: Send on Save triggered for post ID: ' . $post_id);
         
-        if (!$already_sent) {
-            // Send newsletter immediately
-            $result = wns_send_post_newsletter_manual($post_id, $send_to_selected, $selected_subscribers);
-            
-            if ($result['success']) {
-                // Mark as sent
-                update_post_meta($post_id, '_wns_notification_sent', true);
-                
-                // Add admin notice
-                add_action('admin_notices', function() use ($result) {
-                    echo '<div class="notice notice-success is-dismissible">';
-                    echo '<p><strong>Newsletter Sent!</strong> ' . esc_html($result['message']) . '</p>';
-                    echo '</div>';
-                });
-            } else {
-                // Add error notice
-                add_action('admin_notices', function() use ($result) {
-                    echo '<div class="notice notice-error is-dismissible">';
-                    echo '<p><strong>Newsletter Error:</strong> ' . esc_html($result['message']) . '</p>';
-                    echo '</div>';
-                });
-            }
+        // RESET the notification sent status when manually sending
+        delete_post_meta($post_id, '_wns_notification_sent');
+        error_log('WNS Debug: Reset notification sent status for manual send');
+        
+        // Ensure we have the post object
+        $post = get_post($post_id);
+        if (!$post || $post->post_status !== 'publish') {
+            error_log('WNS Debug: Post not published, skipping send');
+            return; // Only send for published posts
         }
+        
+        error_log('WNS Debug: Calling manual send with send_to_selected: ' . $send_to_selected . ', subscribers: ' . print_r($selected_subscribers, true));
+        
+        // Send newsletter immediately
+        $result = wns_send_post_newsletter_manual($post_id, $send_to_selected, $selected_subscribers);
+        
+        error_log('WNS Debug: Manual send result: ' . print_r($result, true));
+        
+        if ($result['success']) {
+            // Mark as sent
+            update_post_meta($post_id, '_wns_notification_sent', true);
+            
+            // Add admin notice
+            set_transient('wns_admin_notice_' . get_current_user_id(), array(
+                'type' => 'success',
+                'message' => 'Newsletter Sent! ' . $result['message']
+            ), 30);
+            
+            error_log('WNS Debug: Newsletter marked as sent and admin notice set');
+        } else {
+            // Add error notice
+            set_transient('wns_admin_notice_' . get_current_user_id(), array(
+                'type' => 'error',
+                'message' => 'Newsletter Error: ' . $result['message']
+            ), 30);
+            
+            error_log('WNS Debug: Newsletter send failed: ' . $result['message']);
+        }
+    }
+}
+
+// Display admin notices from transients
+add_action('admin_notices', 'wns_display_post_meta_notices');
+
+function wns_display_post_meta_notices() {
+    $notice = get_transient('wns_admin_notice_' . get_current_user_id());
+    if ($notice) {
+        delete_transient('wns_admin_notice_' . get_current_user_id());
+        $class = $notice['type'] === 'success' ? 'notice-success' : 'notice-error';
+        echo '<div class="notice ' . $class . ' is-dismissible">';
+        echo '<p><strong>' . esc_html($notice['message']) . '</strong></p>';
+        echo '</div>';
     }
 }
 
